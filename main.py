@@ -11,14 +11,25 @@ def get_items(playwright):
     items = []
     unique_urls = set()  # To track unique items by URL
     
-    with playwright.chromium.launch(headless=True) as browser:
+    with playwright.chromium.launch(headless=False) as browser:
         page = browser.new_page()
         pages = 1
         total_items = 0
         
         while True:
             print(f"Scraping page {pages}...")
-            page.goto(f"{base_url}&page={pages}")
+            page.goto(f"{base_url}")
+            time.sleep(3)
+            content_container = page.wait_for_selector("section.content-container", timeout=5000)
+            filter_bar = content_container.query_selector("div.u-flexbox.u-flex-wrap")
+            filters = filter_bar.query_selector_all("div.u-ui-margin-right-regular.u-ui-margin-bottom-regular")
+            brand_filter = filters[2]
+            button = brand_filter.query_selector("button")
+            button.click()
+            brands = brand_filter.query_selector_all("li.pile__element")
+            for brand in brands:
+                brand_id = brand.query_selector("div.web_ui__Cell__cell.web_ui__Cell__default.web_ui__Cell__navigating").get_attribute("data-testid")
+                print(brand_id)
 
             try:
                 # Wait until items are loaded or timeout after 5 seconds
