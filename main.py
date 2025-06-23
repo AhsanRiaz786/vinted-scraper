@@ -16,8 +16,8 @@ def extract_id(text):
 
 
 def get_brands(playwright):
-    """Extracts all brand IDs from the filter options."""
-    brand_ids = []
+    """Extracts all brand IDs and names from the filter options."""
+    brands = []  # Will store tuples of (brand_id, brand_name)
     with playwright.chromium.launch(headless=True) as browser:
         page = browser.new_page()
         page.goto(f"{base_url}")
@@ -40,19 +40,45 @@ def get_brands(playwright):
         button = brand_filter.query_selector("button")
         button.click()
         
-        # Extract brand IDs
+        # Extract brand IDs and names
         brand_elements = brand_filter.query_selector_all("li.pile__element")
         for brand_element in brand_elements:
-            brand_data_testid = brand_element.query_selector("div.web_ui__Cell__cell.web_ui__Cell__default.web_ui__Cell__navigating").get_attribute("data-testid")
-            brand_id = extract_id(brand_data_testid)
-            if brand_id:
-                brand_ids.append(brand_id)
+            try:
+                brand_data_testid = brand_element.query_selector("div.web_ui__Cell__cell.web_ui__Cell__default.web_ui__Cell__navigating").get_attribute("data-testid")
+                brand_id = extract_id(brand_data_testid)
                 
-    print(f"Found {len(brand_ids)} brands to scrape")
-    return brand_ids
+                # Try multiple selectors for brand name
+                brand_name = None
+                name_selectors = [
+                    "span.web_ui__Text__text.web_ui__Text__title.web_ui__Text__left",
+                    "span.web_ui__Text__text.web_ui__Text__title",
+                    "span[class*='web_ui__Text__title']",
+                    ".web_ui__Cell__navigating span"
+                ]
+                
+                for selector in name_selectors:
+                    name_element = brand_element.query_selector(selector)
+                    if name_element:
+                        brand_name = name_element.inner_text().strip()
+                        if brand_name:
+                            break
+                
+                if brand_id and brand_name:
+                    brands.append((brand_id, brand_name))
+                    print(f"Found brand: {brand_name} (ID: {brand_id})")
+                elif brand_id:
+                    # Fallback to using ID as name if name extraction fails
+                    brands.append((brand_id, f"Brand_{brand_id}"))
+                    print(f"Found brand: Brand_{brand_id} (ID: {brand_id})")
+                    
+            except Exception as e:
+                print(f"Error extracting brand info: {e}")
+                
+    print(f"Found {len(brands)} brands to scrape")
+    return brands
 
 
-def get_items_for_brand(page, brand_id, unique_urls):
+def get_items_for_brand(page, brand_id, brand_name, unique_urls):
     """Scrapes all items for a specific brand."""
     items = []
     pages = 1
@@ -60,7 +86,7 @@ def get_items_for_brand(page, brand_id, unique_urls):
     
     while True:
         brand_url = f"{base_url}&brand_ids[]={brand_id}&page={pages}"
-        print(f"  Scraping brand {brand_id}, page {pages}...")
+        print(f"  Scraping {brand_name}, page {pages}...")
         page.goto(brand_url)
 
         try:
@@ -68,7 +94,7 @@ def get_items_for_brand(page, brand_id, unique_urls):
             page.wait_for_selector("div.feed-grid__item-content", timeout=5000)
             item_elements = page.query_selector_all("div.feed-grid__item-content")
         except TimeoutError:
-            print(f"  No more items found for brand {brand_id}. Moving to next brand.")
+            print(f"  No more items found for {brand_name}. Moving to next brand.")
             break
 
         page_items = 0
@@ -88,7 +114,7 @@ def get_items_for_brand(page, brand_id, unique_urls):
                     # Add only unique items based on URL
                     if url not in unique_urls:
                         unique_urls.add(url)
-                        items.append([hearts, price, image, url, brand_id])
+                        items.append([hearts, price, image, url, brand_name])
                         page_items += 1
                         brand_items_count += 1
             except Exception as e:
@@ -99,13 +125,13 @@ def get_items_for_brand(page, brand_id, unique_urls):
             
         pages += 1
 
-    print(f"  Brand {brand_id} completed: {brand_items_count} unique items found")
+    print(f"  {brand_name} completed: {brand_items_count} unique items found")
     return items
 
 
 def get_items(playwright):
     """Scrapes all items from all brands using Playwright."""
-    brand_ids = get_brands(playwright)
+    brands = get_brands(playwright)
     all_items = []
     unique_urls = set()  # To track unique items by URL
     
@@ -113,9 +139,9 @@ def get_items(playwright):
         page = browser.new_page()
         total_items = 0
         
-        for i, brand_id in enumerate(brand_ids, 1):
-            print(f"Scraping brand {i}/{len(brand_ids)} (ID: {brand_id})...")
-            brand_items = get_items_for_brand(page, brand_id, unique_urls)
+        for i, (brand_id, brand_name) in enumerate(brands, 1):
+            print(f"Scraping brand {i}/{len(brands)}: {brand_name}...")
+            brand_items = get_items_for_brand(page, brand_id, brand_name, unique_urls)
             all_items.extend(brand_items)
             total_items += len(brand_items)
             print(f"Total items so far: {total_items}")
@@ -169,14 +195,17 @@ def write_paginated_html(item_data):
         <head>
             <title>{filename} - Page {page_num + 1}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; }}
+                body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
                 .header {{ text-align: center; margin-bottom: 20px; }}
                 .items-container {{ display: flex; flex-wrap: wrap; justify-content: center; }}
-                .item {{ width: 200px; margin: 10px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }}
+                .item {{ width: 200px; margin: 10px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white; transition: all 0.3s ease; }}
                 .item img {{ width: 100%; height: auto; }}
                 .item-info {{ padding: 10px; text-align: center; }}
                 .item a {{ text-decoration: none; color: inherit; }}
-                .item:hover {{ box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+                .item:hover {{ box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: translateY(-2px); }}
+                .brand-name {{ color: #666; font-size: 12px; font-weight: bold; }}
+                .hearts {{ color: #e74c3c; font-weight: bold; }}
+                .price {{ color: #27ae60; font-weight: bold; font-size: 14px; }}
             </style>
         </head>
         <body>
@@ -188,15 +217,15 @@ def write_paginated_html(item_data):
             <div class="items-container">
         """
         
-        for hearts, price, image, link, brand_id in page_items:
+        for hearts, price, image, link, brand_name in page_items:
             html_str += f"""
             <div class="item">
                 <a href='{link}' target='_blank'>
-                    <img src='{image}' alt='Item image'>
+                    <img src='{image}' alt='Item from {brand_name}'>
                     <div class="item-info">
-                        <p><strong>❤️ {hearts}</strong></p>
-                        <p>€{price}</p>
-                        <p><small>Brand ID: {brand_id}</small></p>
+                        <p class="hearts">❤️ {hearts}</p>
+                        <p class="price">€{price}</p>
+                        <p class="brand-name">{brand_name}</p>
                     </div>
                 </a>
             </div>
