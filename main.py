@@ -135,7 +135,7 @@ def get_items(playwright):
     all_items = []
     unique_urls = set()  # To track unique items by URL
     
-    with playwright.chromium.launch(headless=False) as browser:
+    with playwright.chromium.launch(headless=True) as browser:
         page = browser.new_page()
         total_items = 0
         
