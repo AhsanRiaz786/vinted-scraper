@@ -6,30 +6,53 @@ base_url = "https://www.vinted.de/catalog?search_id=24361207426&time=1750625701&
 filename = "flared.jeans.xxxs"
 heart_limit = 0
 
+
+def extract_id(text):
+    match = re.search(r'selectable-item-brand-(\d+)--title', text)
+    return int(match.group(1)) if match else None
+
+
+
+def get_brands(playwright):
+    brands = []
+    with playwright.chromium.launch(headless=False) as browser:
+        page = browser.new_page()
+        page.goto(f"{base_url}")
+        time.sleep(3)
+        close_button = page.query_selector("button[data-testid='domain-select-modal-close-button']")
+        if close_button:
+            close_button.click()
+        accept_button = page.query_selector("button[id='onetrust-accept-btn-handler']")
+        if accept_button:
+            accept_button.click()
+        content_container = page.wait_for_selector("section.content-container", timeout=5000)
+        filter_bar = content_container.query_selector("div.u-flexbox.u-flex-wrap")
+        filters = filter_bar.query_selector_all("div.u-ui-margin-right-regular.u-ui-margin-bottom-regular")
+        brand_filter = filters[2]
+        button = brand_filter.query_selector("button")
+        button.click()
+        brands = brand_filter.query_selector_all("li.pile__element")
+        for brand in brands:
+            brand_id = brand.query_selector("div.web_ui__Cell__cell.web_ui__Cell__default.web_ui__Cell__navigating").get_attribute("data-testid")
+            brand_id = extract_id(brand_id)
+            brands.append(brand_id)
+    return brands
+
 def get_items(playwright):
     """Scrapes all items from fully loaded pages using Playwright."""
+    brands = get_brands(playwright)
     items = []
     unique_urls = set()  # To track unique items by URL
     
-    with playwright.chromium.launch(headless=False) as browser:
+    with playwright.chromium.launch(headless=True) as browser:
         page = browser.new_page()
         pages = 1
         total_items = 0
         
         while True:
             print(f"Scraping page {pages}...")
-            page.goto(f"{base_url}")
-            time.sleep(3)
-            content_container = page.wait_for_selector("section.content-container", timeout=5000)
-            filter_bar = content_container.query_selector("div.u-flexbox.u-flex-wrap")
-            filters = filter_bar.query_selector_all("div.u-ui-margin-right-regular.u-ui-margin-bottom-regular")
-            brand_filter = filters[2]
-            button = brand_filter.query_selector("button")
-            button.click()
-            brands = brand_filter.query_selector_all("li.pile__element")
-            for brand in brands:
-                brand_id = brand.query_selector("div.web_ui__Cell__cell.web_ui__Cell__default.web_ui__Cell__navigating").get_attribute("data-testid")
-                print(brand_id)
+            page.goto(f"{base_url}&page={pages}")
+
 
             try:
                 # Wait until items are loaded or timeout after 5 seconds
