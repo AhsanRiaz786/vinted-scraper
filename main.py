@@ -4,7 +4,7 @@ import time
 import math
 import os
 
-base_url = "https://www.vinted.de/catalog?search_id=24361207426&time=1750625701&catalog[]=1841&catalog_from=0&page=1&size_ids[]=1226"
+base_url = "https://www.vinted.de/catalog?search_id=24396400085&time=1750767340&catalog[]=1043&catalog_from=0&page=1&size_ids[]=2&price_from=1&currency=EUR&price_to=20"
 filename = "flared.jeans.xxxs"
 heart_limit = 0
 items_per_page = 500  # Items per HTML page
@@ -89,6 +89,7 @@ def get_items_for_brand(page, brand_id, brand_name, unique_urls):
         brand_url = f"{base_url}&brand_ids[]={brand_id}&page={pages}"
         print(f"  Scraping {brand_name}, page {pages}...")
         page.goto(brand_url)
+        time.sleep(1)
 
         try:
             # Wait until items are loaded or timeout after 5 seconds
@@ -148,7 +149,7 @@ def get_items(playwright):
             print(f"Total items so far: {total_items}")
             
             # Small delay between brands to avoid being rate limited
-            time.sleep(1)
+            time.sleep(3)
 
         print(f"Total unique items scraped from all brands: {total_items}")
     return all_items
