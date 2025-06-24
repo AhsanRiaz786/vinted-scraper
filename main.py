@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright, TimeoutError
 import re
 import time
 import math
+import os
 
 base_url = "https://www.vinted.de/catalog?search_id=24361207426&time=1750625701&catalog[]=1841&catalog_from=0&page=1&size_ids[]=1226"
 filename = "flared.jeans.xxxs"
@@ -159,9 +160,15 @@ def sort(item_data):
 
 
 def write_paginated_html(item_data):
-    """Writes sorted items to paginated HTML files."""
+    """Writes sorted items to paginated HTML files in a dedicated folder."""
     total_items = len(item_data)
     total_pages = math.ceil(total_items / items_per_page)
+    
+    # Create output directory
+    output_dir = filename
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created output directory: {output_dir}")
     
     print(f"Creating {total_pages} HTML pages with {items_per_page} items each...")
     
@@ -179,12 +186,12 @@ def write_paginated_html(item_data):
             
             # Previous page link
             if page_num > 0:
-                prev_file = f"{filename}_page_{page_num}.html" if page_num == 1 else f"{filename}_page_{page_num}.html"
-                nav_links += f"<a href='{filename}_page_{page_num}.html' style='margin: 0 10px; padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;'>← Previous</a>"
+                prev_file = f"page_{page_num}.html"
+                nav_links += f"<a href='{prev_file}' style='margin: 0 10px; padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;'>← Previous</a>"
             
             # Next page link
             if page_num < total_pages - 1:
-                next_file = f"{filename}_page_{page_num + 2}.html"
+                next_file = f"page_{page_num + 2}.html"
                 nav_links += f"<a href='{next_file}' style='margin: 0 10px; padding: 5px 10px; background: #007bff; color: white; text-decoration: none; border-radius: 3px;'>Next →</a>"
             
             nav_links += "</div></div>"
@@ -235,14 +242,15 @@ def write_paginated_html(item_data):
         html_str += nav_links  # Add navigation at bottom too
         html_str += "</body></html>"
         
-        # Write to file
-        page_filename = f"{filename}_page_{page_num + 1}.html"
-        with open(page_filename, "w", encoding="utf-8") as html_file:
+        # Write to file in the dedicated folder
+        page_filename = f"page_{page_num + 1}.html"
+        file_path = os.path.join(output_dir, page_filename)
+        with open(file_path, "w", encoding="utf-8") as html_file:
             html_file.write(html_str)
         
-        print(f"Created {page_filename} with {len(page_items)} items")
+        print(f"Created {output_dir}/{page_filename} with {len(page_items)} items")
     
-    print(f"All {total_pages} HTML pages created successfully!")
+    print(f"All {total_pages} HTML pages created successfully in '{output_dir}' folder!")
     return total_pages
 
 
