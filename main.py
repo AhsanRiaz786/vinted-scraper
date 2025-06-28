@@ -4,7 +4,7 @@ import time
 import math
 import os
 
-base_url = "https://www.vinted.de/catalog?search_id=24396400085&time=1750767340&catalog[]=1043&catalog_from=0&page=1&size_ids[]=2&price_from=1&currency=EUR&price_to=20"
+base_url = "https://www.vinted.de/catalog/26-sunglasses?search_id=24435863200&time=1751113385"
 filename = "flared.jeans.xxxs"
 heart_limit = 0
 items_per_page = 500  # Items per HTML page
@@ -37,7 +37,13 @@ def get_brands(playwright):
         content_container = page.wait_for_selector("section.content-container", timeout=5000)
         filter_bar = content_container.query_selector("div.u-flexbox.u-flex-wrap")
         filters = filter_bar.query_selector_all("div.u-ui-margin-right-regular.u-ui-margin-bottom-regular")
-        brand_filter = filters[2]
+        for filter in filters:
+            if(filter.query_selector("span.web_ui__Text__text.web_ui__Text__subtitle.web_ui__Text__left.web_ui__Text__amplified.web_ui__Text__truncated").inner_text() == "Marke"):
+                brand_filter = filter
+                break
+            else:
+                continue
+        
         button = brand_filter.query_selector("button")
         button.click()
         
