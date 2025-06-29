@@ -19,7 +19,7 @@ def extract_id(text):
 def get_brands(playwright):
     """Extracts all brand IDs and names from the filter options."""
     brands = []  # Will store tuples of (brand_id, brand_name)
-    with playwright.chromium.launch(headless=True) as browser:
+    with playwright.chromium.launch(headless=False) as browser:
         page = browser.new_page()
         page.goto(f"{base_url}")
         time.sleep(3)
@@ -94,8 +94,20 @@ def get_items_for_brand(page, brand_id, brand_name, unique_urls):
     while True:
         brand_url = f"{base_url}&brand_ids[]={brand_id}&page={pages}"
         print(f"  Scraping {brand_name}, page {pages}...")
-        page.goto(brand_url)
-        time.sleep(1)
+        
+        try:
+            page.goto(brand_url, timeout=30000)  # Set explicit timeout
+            time.sleep(1)
+        except Exception as e:
+            print(f"  Error loading page for {brand_name}, page {pages}: {e}")
+            if pages == 1:
+                # If first page fails, skip this brand entirely
+                print(f"  Skipping brand {brand_name} due to page load failure")
+                break
+            else:
+                # If subsequent page fails, assume no more pages
+                print(f"  No more pages for {brand_name} (page load failed)")
+                break
 
         try:
             # Wait until items are loaded or timeout after 5 seconds
@@ -103,6 +115,9 @@ def get_items_for_brand(page, brand_id, brand_name, unique_urls):
             item_elements = page.query_selector_all("div.feed-grid__item-content")
         except TimeoutError:
             print(f"  No more items found for {brand_name}. Moving to next brand.")
+            break
+        except Exception as e:
+            print(f"  Error finding items for {brand_name}: {e}")
             break
 
         page_items = 0
@@ -139,25 +154,46 @@ def get_items_for_brand(page, brand_id, brand_name, unique_urls):
 
 def get_items(playwright):
     """Scrapes all items from all brands using Playwright."""
-    brands = get_brands(playwright)
+    try:
+        brands = get_brands(playwright)
+    except Exception as e:
+        print(f"Error getting brands: {e}")
+        print("Unable to proceed without brand information.")
+        return []
+    
     all_items = []
     unique_urls = set()  # To track unique items by URL
     
     with playwright.chromium.launch(headless=True) as browser:
         page = browser.new_page()
         total_items = 0
+        successful_brands = 0
+        failed_brands = 0
         
         for i, (brand_id, brand_name) in enumerate(brands, 1):
             print(f"Scraping brand {i}/{len(brands)}: {brand_name}...")
-            brand_items = get_items_for_brand(page, brand_id, brand_name, unique_urls)
-            all_items.extend(brand_items)
-            total_items += len(brand_items)
-            print(f"Total items so far: {total_items}")
             
-            # Small delay between brands to avoid being rate limited
-            time.sleep(3)
+            try:
+                brand_items = get_items_for_brand(page, brand_id, brand_name, unique_urls)
+                all_items.extend(brand_items)
+                total_items += len(brand_items)
+                successful_brands += 1
+                print(f"Total items so far: {total_items}")
+                
+                # Small delay between brands to avoid being rate limited
+                time.sleep(3)
+                
+            except Exception as e:
+                print(f"Error scraping brand {brand_name}: {e}")
+                failed_brands += 1
+                print(f"Continuing with next brand...")
+                continue
 
-        print(f"Total unique items scraped from all brands: {total_items}")
+        print(f"Scraping completed!")
+        print(f"Successfully scraped: {successful_brands} brands")
+        print(f"Failed brands: {failed_brands}")
+        print(f"Total unique items scraped: {total_items}")
+        
     return all_items
 
 
@@ -262,11 +298,26 @@ def write_paginated_html(item_data):
 
 
 def main():
-    with sync_playwright() as playwright:
-        items = get_items(playwright)
-        sorted_data = sort(items)
-        total_pages = write_paginated_html(sorted_data)
-        print(f"Script completed. Created {total_pages} HTML pages with {len(items)} total items.")
+    items = []
+    try:
+        with sync_playwright() as playwright:
+            items = get_items(playwright)
+    except Exception as e:
+        print(f"Critical error during scraping: {e}")
+        print("Proceeding with whatever items were collected...")
+    
+    # Always try to generate HTML, even if scraping failed or was incomplete
+    if items:
+        print(f"Generating HTML with {len(items)} items...")
+        try:
+            sorted_data = sort(items)
+            total_pages = write_paginated_html(sorted_data)
+            print(f"Script completed successfully! Created {total_pages} HTML pages with {len(items)} total items.")
+        except Exception as e:
+            print(f"Error generating HTML: {e}")
+            print("HTML generation failed.")
+    else:
+        print("No items were collected. No HTML files will be generated.")
 
 if __name__ == '__main__':
     start_time = time.time()
